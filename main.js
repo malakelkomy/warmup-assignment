@@ -186,7 +186,55 @@ function metQuota(date, activeTime) {
 // Returns: object with 10 properties or empty object {}
 // ============================================================
 function addShiftRecord(textFile, shiftObj) {
-    // TODO: Implement this function
+
+  const lines = readLines(textFile);
+
+  for (const line of lines) {
+    const entry = parseShiftLine(line);
+    if (!entry) continue; 
+
+    if (entry.driverID === shiftObj.driverID && entry.date === shiftObj.date) {
+      return {};
+    }
+  }
+
+  const shiftDuration = getShiftDuration(shiftObj.startTime, shiftObj.endTime);
+  const idleTime = getIdleTime(shiftObj.startTime, shiftObj.endTime);
+  const activeTime = getActiveTime(shiftDuration, idleTime);
+  const quota = metQuota(shiftObj.date, activeTime);
+
+  const newRecord = {
+    driverID: shiftObj.driverID,
+    driverName: shiftObj.driverName,
+    date: shiftObj.date,
+    startTime: shiftObj.startTime,
+    endTime: shiftObj.endTime,
+    shiftDuration,
+    idleTime,
+    activeTime,
+    metQuota: quota,
+    hasBonus: false,
+  };
+
+  const newLine = shiftToLine(newRecord);
+
+  let lastIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const entry = parseShiftLine(lines[i]);
+    if (entry && entry.driverID === shiftObj.driverID) {
+      lastIndex = i;
+    }
+  }
+
+  if (lastIndex === -1) {
+    lines.push(newLine);
+  } else {
+    lines.splice(lastIndex + 1, 0, newLine);
+  }
+
+  fs.writeFileSync(textFile, lines.join("\n") + "\n", "utf8");
+
+  return newRecord;
 }
 
 // ============================================================
@@ -197,8 +245,25 @@ function addShiftRecord(textFile, shiftObj) {
 // newValue: (typeof boolean)
 // Returns: nothing (void)
 // ============================================================
+// --- MAIN FUNCTIONS ---
+
+// ... Functions 1 through 5 ...
+
+// Function 6: Updates the 'hasBonus' status for a specific driver and date
 function setBonus(textFile, driverID, date, newValue) {
-    // TODO: Implement this function
+  const lines = readLines(textFile);
+  for (let i = 0; i < lines.length; i++) {
+    const entry = parseShiftLine(lines[i]);
+    
+    if (!entry) continue; 
+    
+    if (entry.driverID === driverID && entry.date === date) {
+      entry.hasBonus = newValue;
+      lines[i] = shiftToLine(entry); 
+      break;
+    }
+  }
+  fs.writeFileSync(textFile, lines.join("\n") + "\n", "utf8");
 }
 
 // ============================================================
@@ -208,8 +273,29 @@ function setBonus(textFile, driverID, date, newValue) {
 // month: (typeof string) formatted as mm or m
 // Returns: number (-1 if driverID not found)
 // ============================================================
+// Function 7: Counts the number of bonus records for a driver in a specific month
 function countBonusPerMonth(textFile, driverID, month) {
-    // TODO: Implement this function
+  const lines = readLines(textFile);
+  const targetMonth = parseInt(month); 
+ 
+  let driverExists = false;
+  let count = 0;
+ 
+  for (const line of lines) {
+    const entry = parseShiftLine(line);
+    if (!entry) continue; 
+    
+    if (entry.driverID === driverID) {
+      driverExists = true;
+      const entryMonth = parseInt(entry.date.split("-")[1]);
+      if (entryMonth === targetMonth && entry.hasBonus === true) {
+        count++;
+      }
+    }
+  }
+ 
+  if (!driverExists) return -1;
+  return count;
 }
 
 // ============================================================
@@ -219,8 +305,26 @@ function countBonusPerMonth(textFile, driverID, month) {
 // month: (typeof number)
 // Returns: string formatted as hhh:mm:ss
 // ============================================================
+// Function 8: Calculates total active hours for a specific driver and month
 function getTotalActiveHoursPerMonth(textFile, driverID, month) {
-    // TODO: Implement this function
+  const lines = readLines(textFile);
+  const targetMonth = parseInt(month);
+  let totalSec = 0;
+
+  for (const line of lines) {
+    const entry = parseShiftLine(line);
+    
+    if (!entry) continue;
+
+    if (entry.driverID === driverID) {
+      const entryMonth = parseInt(entry.date.split("-")[1]);
+      if (entryMonth === targetMonth) {
+        totalSec += parseDurationToSeconds(entry.activeTime);
+      }
+    }
+  }
+
+  return secondsToLongDuration(totalSec);
 }
 
 // ============================================================
@@ -232,10 +336,38 @@ function getTotalActiveHoursPerMonth(textFile, driverID, month) {
 // month: (typeof number)
 // Returns: string formatted as hhh:mm:ss
 // ============================================================
+// Function 9: Calculates the total required hours for a driver in a given month
 function getRequiredHoursPerMonth(textFile, rateFile, bonusCount, driverID, month) {
-    // TODO: Implement this function
-}
+  const lines = readLines(textFile);
+  const targetMonth = parseInt(month);
+  const rate = getDriverRate(rateFile, driverID);
+  const driverDayOff = rate ? rate.dayOff.trim() : null;
 
+  let totalSec = 0;
+
+  for (const line of lines) {
+    const entry = parseShiftLine(line);
+    
+    if (!entry) continue;
+
+    if (entry.driverID === driverID) {
+      const entryMonth = parseInt(entry.date.split("-")[1]);
+      if (entryMonth === targetMonth) {
+        
+        const dayOfWeek = getDayOfWeek(entry.date);
+        if (driverDayOff && dayOfWeek === driverDayOff) continue;
+
+        const quota = isEidPeriod(entry.date) ? 6 * 3600 : 8 * 3600 + 24 * 60;
+        totalSec += quota;
+      }
+    }
+  }
+
+  totalSec -= bonusCount * 2 * 3600;
+  if (totalSec < 0) totalSec = 0;
+
+  return secondsToLongDuration(totalSec);
+}
 // ============================================================
 // Function 10: getNetPay(driverID, actualHours, requiredHours, rateFile)
 // driverID: (typeof string)
@@ -244,8 +376,35 @@ function getRequiredHoursPerMonth(textFile, rateFile, bonusCount, driverID, mont
 // rateFile: (typeof string) path to driver rates text file
 // Returns: integer (net pay)
 // ============================================================
+// Function 10: Calculates the net pay after applying tier-based allowances and deductions
 function getNetPay(driverID, actualHours, requiredHours, rateFile) {
-    // TODO: Implement this function
+  const rate = getDriverRate(rateFile, driverID);
+  if (!rate) return 0; 
+
+  const basePay = rate.basePay;
+  const tier = rate.tier;
+ 
+  const actualSec = parseDurationToSeconds(actualHours);
+  const requiredSec = parseDurationToSeconds(requiredHours);
+ 
+  if (actualSec >= requiredSec) return basePay;
+ 
+  const missingSec = requiredSec - actualSec;
+ 
+  const allowance = { 1: 50, 2: 20, 3: 10, 4: 3 };
+  const allowedHours = allowance[tier] || 0;
+ 
+  const remainingSec = missingSec - (allowedHours * 3600);
+ 
+  if (remainingSec <= 0) return basePay;
+
+  const billableHours = Math.floor(remainingSec / 3600);
+ 
+  
+  const deductionRatePerHour = Math.floor(basePay / 185);
+  const salaryDeduction = billableHours * deductionRatePerHour;
+ 
+  return basePay - salaryDeduction;
 }
 
 module.exports = {
