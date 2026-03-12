@@ -121,7 +121,10 @@ function isEidPeriod(dateStr) {
 // Returns: string formatted as h:mm:ss
 // ============================================================
 function getShiftDuration(startTime, endTime) {
-    // TODO: Implement this function
+  const startSec = parseTimeToSeconds(startTime);
+  const endSec = parseTimeToSeconds(endTime);
+  const diff = endSec - startSec;
+  return secondsToDuration(diff);
 }
 
 // ============================================================
@@ -131,7 +134,25 @@ function getShiftDuration(startTime, endTime) {
 // Returns: string formatted as h:mm:ss
 // ============================================================
 function getIdleTime(startTime, endTime) {
-    // TODO: Implement this function
+  const startSec = parseTimeToSeconds(startTime);
+  const endSec = parseTimeToSeconds(endTime);
+ 
+  const deliveryStart = 8 * 3600;   
+  const deliveryEnd = 22 * 3600;    
+ 
+  let idleSec = 0;
+ 
+  if (startSec < deliveryStart) {
+    const earlyEnd = Math.min(endSec, deliveryStart);
+    idleSec += earlyEnd - startSec;
+  }
+ 
+  if (endSec > deliveryEnd) {
+    const lateStart = Math.max(startSec, deliveryEnd);
+    idleSec += endSec - lateStart;
+  }
+ 
+  return secondsToDuration(idleSec);
 }
 
 // ============================================================
@@ -141,7 +162,9 @@ function getIdleTime(startTime, endTime) {
 // Returns: string formatted as h:mm:ss
 // ============================================================
 function getActiveTime(shiftDuration, idleTime) {
-    // TODO: Implement this function
+  const shiftSec = parseDurationToSeconds(shiftDuration);
+  const idleSec = parseDurationToSeconds(idleTime);
+  return secondsToDuration(shiftSec - idleSec);
 }
 
 // ============================================================
@@ -151,7 +174,9 @@ function getActiveTime(shiftDuration, idleTime) {
 // Returns: boolean
 // ============================================================
 function metQuota(date, activeTime) {
-    // TODO: Implement this function
+  const activeSec = parseDurationToSeconds(activeTime);
+  const quotaSec = isEidPeriod(date) ? 6 * 3600 : 8 * 3600 + 24 * 60; 
+  return activeSec >= quotaSec;
 }
 
 // ============================================================
