@@ -1,4 +1,118 @@
 const fs = require("fs");
+// helper methods
+function parseTimeToSeconds(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return 0; 
+  
+  const lower = timeStr.trim().toLowerCase();
+  const isPM = lower.includes("pm");
+  
+  const match = lower.match(/(\d+):(\d+):(\d+)/);
+  if (!match) return 0;
+
+  let h = parseInt(match[1]);
+  let m = parseInt(match[2]);
+  let s = parseInt(match[3]);
+
+  if (isPM && h !== 12) h += 12;
+  if (!isPM && h === 12) h = 0;
+
+  return h * 3600 + m * 60 + s;
+}
+
+function parseDurationToSeconds(durStr) {
+  
+  if (!durStr || typeof durStr !== 'string' || !durStr.includes(":")) return 0;
+  
+  const parts = durStr.trim().split(":").map(Number);
+  
+  
+  const h = parts[0] || 0;
+  const m = parts[1] || 0;
+  const s = parts[2] || 0;
+  
+  return h * 3600 + m * 60 + s;
+}
+
+function secondsToDuration(totalSeconds) {
+  totalSeconds = Math.abs(Math.round(totalSeconds));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function secondsToLongDuration(totalSeconds) {
+  return secondsToDuration(totalSeconds); 
+}
+
+function readLines(filePath) {
+  const content = fs.readFileSync(filePath, "utf8");
+  return content.split(/\r?\n/).filter((l) => l.trim() !== "");
+}
+
+function parseShiftLine(line) {
+  const parts = line.split(",");
+  if (parts.length < 10) return null;
+  return {
+    driverID: (parts[0] || "").trim(),
+    driverName: (parts[1] || "").trim(),
+    date: (parts[2] || "").trim(),
+    startTime: (parts[3] || "").trim(),
+    endTime: (parts[4] || "").trim(),
+    shiftDuration: (parts[5] || "").trim(),
+    idleTime: (parts[6] || "").trim(),
+    activeTime: (parts[7] || "").trim(),
+    metQuota: (parts[8] || "").trim().toLowerCase() === "true",
+    hasBonus: (parts[9] || "").trim().toLowerCase() === "true",
+  };
+}
+
+function shiftToLine(obj) {
+  return [
+    obj.driverID,
+    obj.driverName,
+    obj.date,
+    obj.startTime,
+    obj.endTime,
+    obj.shiftDuration,
+    obj.idleTime,
+    obj.activeTime,
+    obj.metQuota,
+    obj.hasBonus,
+  ].join(",");
+}
+
+function parseRateLine(line) {
+  const parts = line.split(",");
+  return {
+    driverID: parts[0].trim(),
+    dayOff: parts[1].trim(),
+    basePay: parseInt(parts[2].trim()),
+    tier: parseInt(parts[3].trim()),
+  };
+}
+
+function getDriverRate(rateFile, driverID) {
+  const lines = readLines(rateFile);
+  for (const line of lines) {
+    const rate = parseRateLine(line);
+    if (rate.driverID === driverID) return rate;
+  }
+  return null;
+}
+
+function getDayOfWeek(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  return days[date.getDay()];
+}
+
+
+function isEidPeriod(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return y === 2025 && m === 4 && d >= 10 && d <= 30;
+}
 
 // ============================================================
 // Function 1: getShiftDuration(startTime, endTime)
